@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tangram de Imagem</title>
+    <style>
+        /* RESET E VARIÁVEIS */
+        :root {
+            --primary: #4caf50;
+            --primary-hover: #45a049;
+            --bg-color: #f4f4f9;
+            --board-bg: #eaeaea;
+            --text-color: #333;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-color); 
+            overflow-x: hidden; 
+        }
+
+        /* CABEÇALHO */
+        header { 
+            background: #fff; 
+            padding: 15px 20px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: space-between; 
+            align-items: center; 
+            gap: 15px; 
+            z-index: 10; 
+            position: relative; 
+        }
+        h1 { font-size: 1.5rem; color: #222; }
+        .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        
+        button, .upload-btn { 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            padding: 10px 18px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 0.95rem; 
+            font-weight: bold; 
+            transition: background 0.2s, transform 0.1s; 
+            display: inline-block;
+        }
+        button:hover, .upload-btn:hover { background: var(--primary-hover); }
+        button:active, .upload-btn:active { transform: scale(0.97); }
+        input[type="file"] { display: none; }
+        
+        .status { 
+            font-weight: bold; 
+            font-size: 1.1rem; 
+            color: #444; 
+            background: #e0e0e0; 
+            padding: 6px 15px; 
+            border-radius: 20px; 
+        }
+
+        /* ÁREA PRINCIPAL */
+        #workspace { 
+            display: flex; 
+            flex-direction: row; 
+            height: calc(100vh - 75px); 
+            width: 100%; 
+            position: relative; 
+            padding: 20px; 
+            gap: 20px; 
+        }
+        
+        /* ÁREA DE MONTAGEM (ESQUERDA) */
+        #board-container { 
+            flex: 1 1 auto; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: flex-start;
+        }
+        .area-title { 
+            margin-bottom: 12px; 
+            font-weight: 600; 
+            color: #666; 
+            text-transform: uppercase; 
+            font-size: 0.9rem; 
+            letter-spacing: 1px; 
+        }
+        #board { 
+            position: relative; 
+            background: var(--board-bg); 
+            border: 2px dashed #bbb; 
+            border-radius: 8px; 
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.05); 
+            transition: all 0.3s;
+        }
+        .placeholder-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #888;
+            text-align: center;
+            pointer-events: none;
+            font-size: 1.1rem;
+            width: 80%;
+        }
+
+        /* ÁREA DAS PEÇAS (DIREITA) */
+        #tray-container { 
+            flex: 0 0 320px; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 250px; 
+        }
+        #pieces-tray { 
+            flex: 1; 
+            background: #fff; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.03); 
+            position: relative;
+        }
+
+        /* SOMBRAS (SVG) */
+        svg { position: absolute; top: 0; left: 0; pointer-events: none; width: 100%; height: 100%; }
+        .shadow-polygon { 
+            fill: rgba(0,0,0,0.15); 
+            stroke: #aaa; 
+            stroke-width: 0.005; 
+            stroke-linejoin: round; 
+            transition: opacity 0.4s ease; 
+        }
+        .shadow-polygon.filled { opacity: 0; }
+
+        /* PEÇAS */
+        .tangram-piece { 
+            position: absolute; 
+            cursor: grab; 
+            touch-action: none; 
+            filter: drop-shadow(2px 3px 5px rgba(0,0,0,0.4)); 
+            transition: transform 0.1s ease; 
+            transform-origin: center; 
+        }
+        .tangram-piece.dragging { 
+            cursor: grabbing; 
+            filter: drop-shadow(8px 10px 15px rgba(0,0,0,0.5)); 
+            transform: scale(1.05); 
+            z-index: 1000 !important; 
+        }
+        .tangram-piece.placed { 
+            cursor: default; 
+            filter: drop-shadow(0px 0px 0px transparent); 
+            pointer-events: none; 
+            z-index: 1 !important; 
+            transition: left 0.3s ease, top 0.3s ease, filter 0.3s ease; 
+        }
+
+        /* ANIMAÇÃO DE VITÓRIA */
+        #win-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(255,255,255,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            border-radius: 8px;
+            z-index: 50;
+        }
+        #win-overlay.active { opacity: 1; pointer-events: auto; }
+        #win-overlay h2 { color: var(--primary); font-size: 2.2rem; margin-bottom: 20px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+
+        /* RESPONSIVIDADE */
+        @media (max-width: 768px) {
+            #workspace { flex-direction: column; height: auto; min-height: calc(100vh - 75px); padding: 10px; gap: 10px; }
+            header { flex-direction: column; align-items: stretch; }
+            .controls { justify-content: center; }
+            #tray-container { flex: 1 1 auto; min-height: 400px; } 
+            #board-container { flex: 0 0 auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Tangram de Imagem</h1>
+        <div class="controls">
+            <label class="upload-btn">
+                Carregar Imagem
+                <input type="file" id="image-upload" accept="image/*">
+            </label>
+            <button id="btn-shuffle" style="display: none;">Embaralhar</button>
+            <div class="status">Peças: <span id="score">0</span>/7</div>
+        </div>
+    </header>
+
+    <main id="workspace">
+        <div id="board-container">
+            <div class="area-title">Área de Montagem</div>
+            <div id="board" style="width: 400px; height: 400px;"> 
+                <div class="placeholder-text" id="placeholder">Carregue uma imagem para começar</div>
+                <div id="win-overlay">
+                    <h2>Parabéns!</h2>
+                    <p>Imagem reconstruída!</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="tray-container">
+            <div class="area-title">Peças</div>
+            <div id="pieces-tray"></div>
+        </div>
+    </main>
+
+    <script>
+        // COORDENADAS 100% MATEMÁTICAS E PERFEITAS DO TANGRAM
+        // Nenhuma peça sobrepõe a outra, preenchendo um quadrado exato.
+        const TANGRAM_SHAPES = [
+            [{x: 0, y: 0}, {x: 0.5, y: 0.5}, {x: 0, y: 1}], // 0: Triângulo Grande 1 (Lateral Esquerda)
+            [{x: 0, y: 1}, {x: 0.5, y: 0.5}, {x: 1, y: 1}], // 1: Triângulo Grande 2 (Base)
+            [{x: 0.5, y: 0}, {x: 1, y: 0}, {x: 1, y: 0.5}], // 2: Triângulo Médio (Canto Superior Direito)
+            [{x: 0.5, y: 0.5}, {x: 0.75, y: 0.25}, {x: 1, y: 0.5}, {x: 0.75, y: 0.75}], // 3: Quadrado
+            [{x: 1, y: 1}, {x: 1, y: 0.5}, {x: 0.75, y: 0.75}], // 4: Triângulo Pequeno 1 (Meio da lateral direita)
+            [{x: 0, y: 0}, {x: 0.5, y: 0}, {x: 0.25, y: 0.25}], // 5: Triângulo Pequeno 2 (Topo esquerdo)
+            [{x: 0.25, y: 0.25}, {x: 0.5, y: 0}, {x: 0.75, y: 0.25}, {x: 0.5, y: 0.5}]  // 6: Paralelogramo
+        ];
+
+        let pieces = [];
+        let boardSize = 400;
+        let piecesPlaced = 0;
+        let sourceCanvas = null;
+        let activePiece = null;
+        let highestZ = 10;
+        let dragOffsetX = 0; 
+        let dragOffsetY = 0;
+
+        const imageUpload = document.getElementById('image-upload');
+        const board = document.getElementById('board');
+        const workspace = document.getElementById('workspace');
+        const piecesTray = document.getElementById('pieces-tray');
+        const scoreEl = document.getElementById('score');
+        const placeholder = document.getElementById('placeholder');
+        const btnShuffle = document.getElementById('btn-shuffle');
+        const winOverlay = document.getElementById('win-overlay');
+
+        imageUpload.addEventListener('change', handleImageUpload);
+        btnShuffle.addEventListener('click', shufflePieces);
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => createPuzzle(img);
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function createPuzzle(img) {
+            placeholder.style.display = 'none';
+            btnShuffle.style.display = 'inline-block';
+            winOverlay.classList.remove('active');
+            piecesPlaced = 0;
+            updateScore();
+
+            pieces.forEach(p => p.canvas.remove());
+            pieces = [];
+            const oldSvg = board.querySelector('svg');
+            if (oldSvg) oldSvg.remove();
+
+            calculateBoardSize();
+            createSourceCanvas(img);
+            createShadows();
+            createPieces();
+            
+            setTimeout(shufflePieces, 100);
+        }
+
+        function calculateBoardSize() {
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                boardSize = window.innerWidth - 40; 
+            } else {
+                const containerWidth = document.getElementById('board-container').clientWidth - 40;
+                const maxAvailableHeight = window.innerHeight - 150; 
+                boardSize = Math.min(650, containerWidth, maxAvailableHeight);
+            }
+            board.style.width = boardSize + 'px';
+            board.style.height = boardSize + 'px';
+        }
+
+        function createSourceCanvas(img) {
+            sourceCanvas = document.createElement('canvas');
+            sourceCanvas.width = boardSize;
+            sourceCanvas.height = boardSize;
+            const ctx = sourceCanvas.getContext('2d');
+            
+            const minDim = Math.min(img.width, img.height);
+            const sx = (img.width - minDim) / 2;
+            const sy = (img.height - minDim) / 2;
+            
+            ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, boardSize, boardSize);
+        }
+
+        function createShadows() {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("viewBox", "0 0 1 1"); 
+            
+            TANGRAM_SHAPES.forEach((shape, index) => {
+                const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                const pointsStr = shape.map(p => `${p.x},${p.y}`).join(" ");
+                polygon.setAttribute("points", pointsStr);
+                polygon.setAttribute("class", "shadow-polygon");
+                polygon.setAttribute("id", `shadow-${index}`);
+                svg.appendChild(polygon);
+            });
+            
+            board.appendChild(svg);
+        }
+
+        function createPieces() {
+            pieces = TANGRAM_SHAPES.map((shape, index) => {
+                const xs = shape.map(p => p.x);
+                const ys = shape.map(p => p.y);
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minY = Math.min(...ys);
+                const maxY = Math.max(...ys);
+
+                const width = (maxX - minX) * boardSize;
+                const height = (maxY - minY) * boardSize;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                ctx.translate(-minX * boardSize, -minY * boardSize);
+
+                ctx.beginPath();
+                ctx.moveTo(shape[0].x * boardSize, shape[0].y * boardSize);
+                for(let i=1; i<shape.length; i++) {
+                    ctx.lineTo(shape[i].x * boardSize, shape[i].y * boardSize);
+                }
+                ctx.closePath();
+                
+                ctx.clip();
+                ctx.drawImage(sourceCanvas, 0, 0);
+
+                canvas.className = 'tangram-piece';
+                canvas.id = `piece-${index}`;
+                workspace.appendChild(canvas);
+
+                const pieceObj = {
+                    id: index,
+                    canvas: canvas,
+                    targetRelX: minX * boardSize, 
+                    targetRelY: minY * boardSize,
+                    width: width,
+                    height: height,
+                    placed: false
+                };
+
+                canvas.addEventListener('pointerdown', (e) => startDrag(e, pieceObj));
+
+                return pieceObj;
+            });
+            
+            document.addEventListener('pointermove', dragPiece);
+            document.addEventListener('pointerup', dropPiece);
+        }
+
+        function shufflePieces() {
+            winOverlay.classList.remove('active');
+            piecesPlaced = 0;
+            updateScore();
+
+            const workspaceRect = workspace.getBoundingClientRect();
+            const trayRect = piecesTray.getBoundingClientRect();
+
+            const trayRelX = trayRect.left - workspaceRect.left;
+            const trayRelY = trayRect.top - workspaceRect.top;
+
+            pieces.forEach(piece => {
+                piece.placed = false;
+                piece.canvas.classList.remove('placed');
+                
+                const shadow = document.getElementById(`shadow-${piece.id}`);
+                if(shadow) shadow.classList.remove('filled');
+
+                const maxLeft = Math.max(0, trayRect.width - piece.width - 20); 
+                const maxTop = Math.max(0, trayRect.height - piece.height - 20);
+                
+                const randX = trayRelX + 10 + Math.random() * maxLeft;
+                const randY = trayRelY + 10 + Math.random() * maxTop;
+
+                piece.canvas.style.left = randX + 'px';
+                piece.canvas.style.top = randY + 'px';
+                piece.canvas.style.zIndex = ++highestZ;
+            });
+        }
+
+        function startDrag(e, pieceObj) {
+            if (pieceObj.placed) return; 
+            
+            e.preventDefault(); 
+            activePiece = pieceObj;
+            
+            const rect = activePiece.canvas.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+
+            activePiece.canvas.classList.add('dragging');
+            activePiece.canvas.style.zIndex = ++highestZ;
+        }
+
+        function dragPiece(e) {
+            if (!activePiece) return;
+
+            const workspaceRect = workspace.getBoundingClientRect();
+            
+            let newLeft = e.clientX - workspaceRect.left - dragOffsetX;
+            let newTop = e.clientY - workspaceRect.top - dragOffsetY;
+
+            activePiece.canvas.style.left = newLeft + 'px';
+            activePiece.canvas.style.top = newTop + 'px';
+        }
+
+        function dropPiece(e) {
+            if (!activePiece) return;
+            
+            activePiece.canvas.classList.remove('dragging');
+            checkSnap(activePiece);
+            activePiece = null;
+        }
+
+        function checkSnap(piece) {
+            const workspaceRect = workspace.getBoundingClientRect();
+            const boardRect = board.getBoundingClientRect();
+            
+            const boardRelX = boardRect.left - workspaceRect.left;
+            const boardRelY = boardRect.top - workspaceRect.top;
+            
+            const expectedX = boardRelX + piece.targetRelX;
+            const expectedY = boardRelY + piece.targetRelY;
+
+            const currentX = parseFloat(piece.canvas.style.left);
+            const currentY = parseFloat(piece.canvas.style.top);
+
+            const dist = Math.hypot(currentX - expectedX, currentY - expectedY);
+            
+            if (dist < 40) { 
+                snapPiece(piece, expectedX, expectedY);
+            }
+        }
+
+        function snapPiece(piece, x, y) {
+            piece.placed = true;
+            piece.canvas.style.left = x + 'px';
+            piece.canvas.style.top = y + 'px';
+            piece.canvas.classList.add('placed');
+
+            const shadow = document.getElementById(`shadow-${piece.id}`);
+            if (shadow) shadow.classList.add('filled');
+
+            piecesPlaced++;
+            updateScore();
+            checkCompletion();
+        }
+
+        function updateScore() {
+            scoreEl.textContent = piecesPlaced;
+        }
+
+        function checkCompletion() {
+            if (piecesPlaced === 7) {
+                setTimeout(() => {
+                    winOverlay.classList.add('active');
+                }, 400); 
+            }
+        }
+    </script>
+</body>
+</html>
